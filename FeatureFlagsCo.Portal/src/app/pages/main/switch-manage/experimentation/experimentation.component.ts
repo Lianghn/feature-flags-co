@@ -1,39 +1,56 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { FfcAngularSdkService } from 'ffc-angular-sdk';
 import { NzMessageService } from 'ng-zorro-antd/message';
-import { forkJoin, Subject } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { ExperimentService } from 'src/app/services/experiment.service';
 import { SwitchService } from 'src/app/services/switch.service';
 import { CSwitchParams, IFfParams, IPrequisiteFeatureFlag, IVariationOption } from '../types/switch-new';
+import { differenceInCalendarDays, setHours } from 'date-fns';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'experimentation',
   templateUrl: './experimentation.component.html',
   styleUrls: ['./experimentation.component.less']
 })
-export class ExperimentationComponent implements OnInit, OnDestroy {
+export class ExperimentationComponent implements OnInit {
 
-  private destory$: Subject<void> = new Subject();
   featureFlagId: string;
+  currentVariationOptions: string[] = [];
+  selectedBaseline: string = null;
 
   experimentation: string;
-  currentVariationOptions: IVariationOption[] = [];
-  currentFeatureFlag: IFfParams;
+
+  hasInvalidVariation: boolean = false;
+  hasWinnerVariation: boolean = false;
   constructor(
     private route: ActivatedRoute,
     private switchServe: SwitchService,
     private message: NzMessageService,
+    private experimentService: ExperimentService,
     private ffcAngularSdkService: FfcAngularSdkService
   ) {
-    this.experimentation = this.ffcAngularSdkService.variation('experimentation');
+    this.experimentation = 'final version';//this.ffcAngularSdkService.variation('experimentation');
 
     this.route.data.pipe(map(res => res.switchInfo))
-      .subscribe((result: CSwitchParams) => {
-        const featureDetail = new CSwitchParams(result);
-        this.currentVariationOptions = featureDetail.getVariationOptions();
-        this.currentFeatureFlag = featureDetail.getSwicthDetail();
-      })
+    .subscribe((result: CSwitchParams) => {
+      const featureDetail = new CSwitchParams(result);
+      this.currentVariationOptions = featureDetail.getVariationOptions().map(v => v.variationValue);
+    })
+
+    this.experimentResult = [...this.dataSet]
+    .map((d, idx) => {
+      return Object.assign({}, d, {
+        id: idx,
+        conversionRate: (d.conversionRate * 100).toFixed(1),
+        confidenceInterval: d.confidenceInterval.map(c => c * 100),
+        changeToBaseline: (d.changeToBaseline * 100).toFixed(1),
+        isBaseline: true
+      });
+    });
+
+    this.hasInvalidVariation = this.experimentResult.findIndex(e => e.isInvalid) > -1;
+    this.hasWinnerVariation = this.experimentResult.findIndex(e => e.isWinner) > -1;
   }
 
   ngOnInit(): void {
@@ -43,16 +60,20 @@ export class ExperimentationComponent implements OnInit, OnDestroy {
     }
   }
 
+  disabledDate = (current: Date): boolean =>
+    // Can not select days before today and today
+    differenceInCalendarDays(current, new Date()) > 0;
+
   conversionTableTitle = '';
   isLoading: boolean = false;
-  featureList: IPrequisiteFeatureFlag[] = [];                     // 开关列表
-  targetFeatureFlag: IPrequisiteFeatureFlag;
+  customEventList: string[] = [];
+  selectedEvent: string;
   dateRange:Date[] = [];
   private initData() {
     this.isLoading = true;
-    this.switchServe.getSwitchList(this.switchServe.envId).subscribe((result) => {
+    this.experimentService.getCustomEvents(this.switchServe.envId).subscribe((result) => {
       if(result) {
-        this.featureList = result;
+        this.customEventList = result;
         this.isLoading = false;
       }
     }, _ => {
@@ -65,148 +86,68 @@ export class ExperimentationComponent implements OnInit, OnDestroy {
     this.dateRange = [...result];
   }
 
+  experimentResult = [];
   onSubmit() {
-    // if (!this.targetFeatureFlag) {
-    //   this.message.warning('请选择目标开关！');
-    // }
+
+    if (this.selectedBaseline === undefined || this.selectedBaseline === null) {
+      this.message.warning('请选择基准特性！');
+      return false;
+    }
+
+    if (this.selectedEvent === undefined || this.selectedEvent === null || this.selectedEvent === '') {
+      this.message.warning('请选择事件！');
+      return false;
+    }
 
     if (this.dateRange.length !== 2) {
       this.message.warning('请设置起止时间！');
       return false;
     }
 
-    const baseLine = this.dataSet[0];
 
-    let conversionRate = 0;
-    this.resultData = [...this.dataSet.slice(0, Math.min(this.currentVariationOptions.length, this.dataSet.length))]
+    this.experimentResult = [...this.dataSet]
     .map((d, idx) => {
-      const r = d.conversion / d.uniqueUsers * 100;
-      if (r > conversionRate) {
-        conversionRate = r;
-        this.winnerId = idx;
-      }
-
       return Object.assign({}, d, {
         id: idx,
-        variation: this.currentVariationOptions[idx]?.variationValue,
-        conversionRate: r.toFixed(2),
-        confidenceInterval: d.confidenceInterval,
-        change: d.isBaseline? 'Baseline' : `${(d.conversion / d.uniqueUsers * 100 - baseLine.conversion / baseLine.uniqueUsers * 100).toFixed(2)}%`
+        conversionRate: (d.conversionRate * 100).toFixed(1),
+        confidenceInterval: d.confidenceInterval.map(c => c * 100),
+        changeToBaseline: (d.changeToBaseline * 100).toFixed(1),
+        isBaseline: true
       });
     });
 
-
-    console.log(this.resultData);
+    this.hasInvalidVariation = this.experimentResult.findIndex(e => e.isInvalid) > -1;
+    this.hasWinnerVariation = this.experimentResult.findIndex(e => e.isWinner) > -1;
   }
-
-  winnerId: number = -1;
-  resultData = [];
 
   dataSet = [
     {
-      variation: 'VAR',
-      conversion: 521,
-      uniqueUsers: 999,
-      conversionRate: 0,
-      confidenceInterval: 94.5,
-      change: 0,
-      pValue: '-',
-      isBaseline: true
+        "changeToBaseline": 0.19,
+        "confidenceInterval": [
+            0.51,
+            0.90
+        ],
+        "conversion": 6,
+        "conversionRate": 0.86,
+        "isInvalid": false,
+        "isWinner": true,
+        "pValue": 0.46,
+        "uniqueUsers": 7,
+        "variation": "Green"
     },
     {
-      variation: 'VAR',
-      conversion: 758,
-      uniqueUsers: 1002,
-      conversionRate: 0,
-      confidenceInterval: 97.5,
-      change: 0,
-      pValue: 0.30,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 614,
-      uniqueUsers: 804,
-      conversionRate: 0,
-      confidenceInterval: 95.5,
-      change: 0,
-      pValue: 0.31,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 100,
-      uniqueUsers: 801,
-      conversionRate: 0,
-      confidenceInterval: 91.3,
-      change: 0,
-      pValue: 0.28,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 721,
-      uniqueUsers: 1002,
-      conversionRate: 0,
-      confidenceInterval: 97.5,
-      change: 0,
-      pValue: 0.19,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 54,
-      uniqueUsers: 987,
-      conversionRate: 0,
-      confidenceInterval: 97.5,
-      change: 0,
-      pValue: 0.12,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 101,
-      uniqueUsers: 963,
-      conversionRate: 0,
-      confidenceInterval: 90.5,
-      change: 0,
-      pValue: 0.15,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 99,
-      uniqueUsers: 846,
-      conversionRate: 0,
-      confidenceInterval: 89.5,
-      change: 0,
-      pValue: 0.10,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 653,
-      uniqueUsers: 895,
-      conversionRate: 0,
-      confidenceInterval: 98.5,
-      change: 0,
-      pValue: 0.11,
-      isBaseline: false
-    },
-    {
-      variation: 'VAR',
-      conversion: 211,
-      uniqueUsers: 703,
-      conversionRate: 0,
-      confidenceInterval: 86.7,
-      change: 0,
-      pValue: 0.25,
-      isBaseline: false
+        "changeToBaseline": 0,
+        "confidenceInterval": [
+            0,
+            1
+        ],
+        "conversion": 2,
+        "conversionRate": 0.67,
+        "isInvalid": false,
+        "isWinner": false,
+        "pValue": 0,
+        "uniqueUsers": 3,
+        "variation": "A"
     }
-  ];
-
-  ngOnDestroy(): void {
-    this.destory$.next();
-    this.destory$.complete();
-  }
+  ]
 }
