@@ -128,6 +128,8 @@ namespace FeatureFlags.APIs.Services
                 aggs = aggsEO
             };
 
+            // to see how to create a query to fetch unique values, ref https://www.getargon.io/docs/articles/elasticsearch/unique-values.html
+
             using (var client = new HttpClient())
             {
                 HttpContent content = new StringContent(JsonConvert.SerializeObject(body));
