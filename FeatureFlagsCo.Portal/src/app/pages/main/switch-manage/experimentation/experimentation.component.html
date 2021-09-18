@@ -9,76 +9,90 @@
   <ng-container>
     <div class="detail-body" name="detail" *ngIf="featureFlagId">
       <div *ngIf="experimentation==='final version' || experimentation==='temporary version'">
-        <div nz-row>
-          <span style="display:inline-block; margin-right: 10px;">基准特性</span>
-          <nz-select name="baseline" nzPlaceHolder="请选择基准特性" [(ngModel)]="selectedBaseline" style="width: 25%">
-            <nz-option *ngFor="let variation of currentVariationOptions" [nzLabel]="variation.variationValue" [nzValue]="variation"></nz-option>
-          </nz-select>
-        </div>
-        <div nz-row style="margin-top: 10px;">
-          <span style="display:inline-block; margin-right: 10px;">事件名称</span>
-          <nz-select name="event_list" nzShowSearch nzPlaceHolder="请选择事件" [(ngModel)]="selectedEvent" style="width: 25%">
-            <nz-option *ngFor="let event of customEventList" [nzLabel]="event" [nzValue]="event"></nz-option>
-          </nz-select>
-        </div>
-        <!-- <div nz-row style="margin-top: 10px;">
-          <span style="display:inline-block; margin-right: 10px;">时间区间</span>
-          <nz-range-picker name="date_range" [nzShowTime]="{ nzFormat: 'HH:mm' }" ShowTime [nzDisabledDate]="disabledDate" nzFormat="yyyy-MM-dd HH:mm" [nzAllowClear] [(ngModel)]="dateRange" (ngModelChange)="onChange($event)"  style="width: 25%"></nz-range-picker>
-          <button nz-button nzType="primary" nzBlock (click)="onSubmit()" style="width: 150px;margin-left: 30px">提交</button>
-        </div> -->
-        <nz-card style="margin-top: 20px;">
-          <div>
-            <ul>
-              <li *ngIf="hasInvalidVariation"><i nz-icon class="invalid_icon" nzType="close-circle" nzTheme="outline"></i> 相对于基准特性并不具有统计学上的优势</li>
-              <li *ngIf="hasWinnerVariation"><i nz-icon class="winner_icon" nzType="check-circle" nzTheme="outline"></i> 该特性胜出</li>
-              <li *ngIf="!hasWinnerVariation"><i nz-icon nzType="info-circle" nzTheme="outline"></i> 需要更多的实验数据才能在统计学上确认表格中的结论</li>
-            </ul>
+        <nz-spin [nzSpinning]="isLoadingResult" nzTip="数据加载中...">
+          <div nz-row>
+            <span style="display:inline-block; margin-right: 10px;">事件名称</span>
+            <nz-select name="event_list"
+                nzAllowClear
+                nzShowSearch
+                nzServerSearch
+                nzPlaceHolder="请选择事件"
+                [(ngModel)]="selectedEvent"
+                (nzOnSearch)="onSearchEvents($event)"
+                style="width: 25%">
+                <ng-container *ngFor="let event of eventList">
+                  <nz-option *ngIf="!isEventsLoading" [nzLabel]="event" [nzValue]="event"></nz-option>
+                </ng-container>
+                <nz-option *ngIf="isEventsLoading" nzDisabled nzCustomContent>
+                    <i nz-icon nzType="loading" class="loading-icon"></i> Loading Data...
+                </nz-option>
+            </nz-select>
           </div>
-          <nz-table #borderedTable nzBordered [nzFrontPagination]="false" [nzShowPagination]="false" [nzData]="experimentResult" style="margin-top: 20px;">
-            <thead>
-              <tr>
-                <th>特性</th>
-                <th>转化数 / 用户数</th>
-                <th>转化率</th>
-                <th style="width: 210px">置信区间</th>
-                <th>变化</th>
-                <th>P-值</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr [class.winner]="data.isWinner" *ngFor="let data of borderedTable.data">
-                <td>
-                  <span *ngIf="data.isWinner">
-                    <i nz-icon class="winner_icon" nzType="check-circle" nzTheme="outline"></i>
-                  </span>
-                  <span *ngIf="data.isInvalid">
-                    <i nz-icon class="invalid_icon" nzType="close-circle" nzTheme="outline"></i>
-                  </span>
-                  <span class="icon_placeholder" *ngIf="!data.isWinner && !data.isInvalid"></span>
-                  &nbsp;{{ data.variation }}</td>
-                <td>{{ data.conversion }}/{{ data.uniqueUsers }}</td>
-                <td>{{ data.conversionRate }}%</td>
-                <td>
-                  <div style="width: 200px;box-sizing: border-box;">
-                    <div class="BoxChart">
-                      <div class="BoxChart-whisker"></div>
-                      <div class="BoxChart-box--container">
-                        <div class="BoxChart-box--line"></div>
-                        <div class="BoxChart-box" [style.left.px]="data.confidenceInterval[0] * 2" [style.width.px]="(data.confidenceInterval[1] - data.confidenceInterval[0]) * 2">
-                          <div class="BoxChart-box--median" [style.left.px]="(data.converstionRate - data.confidenceInterval[0]) * 2"></div>
+          <div nz-row style="margin-top: 10px;">
+            <span style="display:inline-block; margin-right: 10px;">基准特性</span>
+            <nz-select name="baseline" nzPlaceHolder="请选择基准特性" [(ngModel)]="selectedBaseline" style="width: 25%">
+              <nz-option *ngFor="let variation of currentVariationOptions" [nzLabel]="variation" [nzValue]="variation"></nz-option>
+            </nz-select>
+          </div>
+          <div nz-row style="margin-top: 10px;">
+            <span style="display:inline-block; margin-right: 10px;">时间区间</span>
+            <nz-range-picker name="date_range" [nzShowTime]="{ nzFormat: 'HH:mm' }" ShowTime [nzDisabledDate]="disabledDate" nzFormat="yyyy-MM-dd HH:mm" [nzAllowClear] [(ngModel)]="dateRange" (ngModelChange)="onDateRangeChange($event)"  style="width: 25%"></nz-range-picker>
+            <button nz-button nzType="primary" nzBlock (click)="onSubmit()" style="width: 150px;margin-left: 30px">提交</button>
+          </div>
+          <nz-card style="margin-top: 20px;">
+            <div>
+              <ul *ngIf="experimentResult.length > 0">
+                <li *ngIf="hasInvalidVariation"><i nz-icon class="invalid_icon" nzType="close-circle" nzTheme="outline"></i> 相对于基准特性并不具有统计学上的优势</li>
+                <li *ngIf="hasWinnerVariation"><i nz-icon class="winner_icon" nzType="check-circle" nzTheme="outline"></i> 该特性胜出</li>
+                <li *ngIf="!hasWinnerVariation"><i nz-icon nzType="info-circle" nzTheme="outline"></i> 需要更多的实验数据才能在统计学上确认表格中的结论</li>
+              </ul>
+            </div>
+            <nz-table #borderedTable nzBordered [nzFrontPagination]="false" [nzShowPagination]="false" [nzData]="experimentResult" style="margin-top: 20px;">
+              <thead>
+                <tr>
+                  <th>特性</th>
+                  <th>转化数 / 用户数</th>
+                  <th>转化率</th>
+                  <th style="width: 210px">置信区间</th>
+                  <th>变化</th>
+                  <th>P-值</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr [class.winner]="data.isWinner" *ngFor="let data of borderedTable.data">
+                  <td>
+                    <span *ngIf="data.isWinner">
+                      <i nz-icon class="winner_icon" nzType="check-circle" nzTheme="outline"></i>
+                    </span>
+                    <span *ngIf="data.isInvalid">
+                      <i nz-icon class="invalid_icon" nzType="close-circle" nzTheme="outline"></i>
+                    </span>
+                    <span class="icon_placeholder" *ngIf="!data.isWinner && !data.isInvalid"></span>
+                    &nbsp;{{ data.variation }}</td>
+                  <td>{{ data.conversion }}/{{ data.uniqueUsers }}</td>
+                  <td>{{ data.conversionRate }}%</td>
+                  <td>
+                    <div style="width: 200px;box-sizing: border-box;">
+                      <div class="BoxChart">
+                        <div class="BoxChart-whisker"></div>
+                        <div class="BoxChart-box--container">
+                          <div class="BoxChart-box--line"></div>
+                          <div class="BoxChart-box" [style.left.px]="data.confidenceInterval[0] * 2" [style.width.px]="(data.confidenceInterval[1] - data.confidenceInterval[0]) * 2">
+                            <div class="BoxChart-box--median" [style.left.px]="(data.converstionRate - data.confidenceInterval[0]) * 2"></div>
+                          </div>
                         </div>
+                        <div class="BoxChart-whisker"></div>
                       </div>
-                      <div class="BoxChart-whisker"></div>
-                    </div>
-                   </div>
-                   <div class="confidence_interval">{{data.confidenceInterval[0]}}% - {{data.confidenceInterval[1]}}%</div>
-                </td>
-                <td>{{ data.changeToBaseline }}%</td>
-                <td>{{ data.pValue }}</td>
-              </tr>
-            </tbody>
-          </nz-table>
-        </nz-card>
+                     </div>
+                     <div class="confidence_interval">{{data.confidenceInterval[0]}}% - {{data.confidenceInterval[1]}}%</div>
+                  </td>
+                  <td>{{ data.changeToBaseline }}%</td>
+                  <td>{{ data.pValue }}</td>
+                </tr>
+              </tbody>
+            </nz-table>
+          </nz-card>
+        </nz-spin>
       </div>
       <div *ngIf="experimentation==='pro only'">
         <nz-empty

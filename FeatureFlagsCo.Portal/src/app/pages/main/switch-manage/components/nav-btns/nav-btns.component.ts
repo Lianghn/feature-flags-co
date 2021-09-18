@@ -27,13 +27,13 @@ export class NavBtnsComponent {
       }
     }
 
-    // const experimentationDisabled = this.ffcAngularSdkService.variation('experimentation') === 'hide';
-    // if (experimentationDisabled) {
-    //   const idx = this.navConfig.findIndex(n => n.id === 'experimentations');
-    //   if (idx > -1) {
-    //     this.navConfig.splice(idx, 1);
-    //   }
-    // }
+    const experimentationDisabled = this.ffcAngularSdkService.variation('experimentation') === 'hide';
+    if (experimentationDisabled) {
+      const idx = this.navConfig.findIndex(n => n.id === 'experimentations');
+      if (idx > -1) {
+        this.navConfig.splice(idx, 1);
+      }
+    }
   }
 
   onCheck(id: string) {

@@ -29,16 +29,29 @@ namespace FeatureFlags.APIs.Controllers
         }
 
         [HttpGet]
-        [Route("CustomEvents/{envId}")]
-        public async Task<dynamic> GetCustomEvents(int envId)
+        [Route("Events/{envId}")]
+        public async Task<dynamic> GetCustomEvents(int envId, [FromQuery]string lastItem, [FromQuery]string searchText)
         {
             var currentUserId = this.HttpContext.User.Claims.FirstOrDefault(p => p.Type == "UserId").Value;
             if (await _envService.CheckIfUserHasRightToReadEnvAsync(currentUserId, envId))
             {
-               return await _experimentsService.GetEnvironmentEvents(envId, MetricTypeEnum.CustomEvent);
+               return await _experimentsService.GetEnvironmentEvents(envId, MetricTypeEnum.CustomEvent, lastItem, searchText);
             }
 
             return new List<string>();
+        }
+
+        [HttpPost]
+        [Route("{envId}")]
+        public async Task<List<ExperimentResult>> GetExperimentsResult(int envId, [FromBody]ExperimentQueryViewModel param)
+        {
+            var currentUserId = this.HttpContext.User.Claims.FirstOrDefault(p => p.Type == "UserId").Value;
+            if (await _envService.CheckIfUserHasRightToReadEnvAsync(currentUserId, envId))
+            {
+                return await _experimentsService.GetExperimentResult(param);
+            }
+
+            return new List<ExperimentResult>();
         }
     }
 }

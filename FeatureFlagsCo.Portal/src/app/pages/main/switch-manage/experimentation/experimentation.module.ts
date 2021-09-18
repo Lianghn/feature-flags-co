@@ -12,6 +12,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { FormsModule } from '@angular/forms';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzCardModule } from 'ng-zorro-antd/card';
+import { NzSpinModule } from 'ng-zorro-antd/spin';
 
 @NgModule({
   declarations: [ExperimentationComponent],
@@ -25,6 +26,7 @@ import { NzCardModule } from 'ng-zorro-antd/card';
     NzButtonModule,
     NzIconModule,
     NzCardModule,
+    NzSpinModule,
     ComponentsModule,
     ExperimentationRoutingModule
   ]
